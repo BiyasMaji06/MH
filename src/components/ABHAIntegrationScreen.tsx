@@ -363,7 +363,7 @@ export default function ABHAIntegrationScreen({
               <Text style={styles.stepLabel}>NEW HEALTH PROFILE</Text>
               <Text style={styles.title}>Create ABHA</Text>
               <Text style={styles.subtitle}>
-                Enter your details to create a test ABHA profile in MumWise.
+                Enter your details to create your ABHA profile.
               </Text>
 
               {renderInput('Full Name *', name, setName, 'Enter your full name')}
@@ -438,10 +438,6 @@ export default function ABHAIntegrationScreen({
                   <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
                 )}
               </TouchableOpacity>
-
-              <Text style={styles.consentText}>
-                This creates a test profile in your app's database. It does not create an official ABHA account.
-              </Text>
             </ScrollView>
           </KeyboardAvoidingView>
         </SafeAreaView>
@@ -548,7 +544,7 @@ export default function ABHAIntegrationScreen({
 
               <Text style={styles.titleCenter}>Verify your identity</Text>
               <Text style={styles.subtitleCenter}>
-                Enter the 6-digit OTP generated for your test profile.
+                Enter the 6-digit OTP sent to you.
               </Text>
 
               <TextInput

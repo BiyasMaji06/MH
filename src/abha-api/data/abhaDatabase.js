@@ -1,4 +1,3 @@
-
 const fs = require('fs');
 const path = require('path');
 
@@ -37,7 +36,7 @@ function generateABHAId(index) {
 function generateInitialProfiles() {
   const profiles = [];
 
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 50; i++) {
     const location = cities[i % cities.length];
 
     profiles.push({

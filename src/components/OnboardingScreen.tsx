@@ -8,10 +8,12 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../services/supabase';
 
 type Props = {
   onContinue: (data: {
@@ -27,85 +29,34 @@ type Props = {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE_REGEX = /^(\d{2})\/(\d{2})\/(\d{4})$/;
-const MAX_DUE_DATE_DAYS_OUT = 294;
 
-function getEmailError(email: string): string | null {
-  if (email.length === 0) return null;
-  return EMAIL_REGEX.test(email) ? null : 'Enter a valid email address';
-}
+function isValidDueDate(value: string) {
+  const match = value.match(DATE_REGEX);
+  if (!match) return false;
 
-function getPasswordError(password: string): string | null {
-  if (password.length === 0) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
 
-  if (password.length < 8) {
-    return 'Use at least 8 characters';
-  }
+  const date = new Date(year, month - 1, day);
 
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-    return 'Include at least one letter and one number';
-  }
-
-  return null;
-}
-
-function getDueDateError(dueDate: string): string | null {
-  if (dueDate.length === 0) return null;
-
-  const match = dueDate.match(DATE_REGEX);
-
-  if (!match) {
-    return 'Use DD/MM/YYYY format';
-  }
-
-  const day = parseInt(match[1], 10);
-  const month = parseInt(match[2], 10);
-  const year = parseInt(match[3], 10);
-
-  const parsed = new Date(year, month - 1, day);
-
-  const isRealCalendarDate =
-    parsed.getFullYear() === year &&
-    parsed.getMonth() === month - 1 &&
-    parsed.getDate() === day;
-
-  if (!isRealCalendarDate) {
-    return 'Enter a valid date';
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return false;
   }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  parsed.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
 
-  if (parsed < today) {
-    return 'Due date cannot be in the past';
-  }
+  const days = Math.ceil(
+    (date.getTime() - today.getTime()) / 86400000
+  );
 
-  const maxDueDate = new Date(today);
-  maxDueDate.setDate(maxDueDate.getDate() + MAX_DUE_DATE_DAYS_OUT);
-
-  if (parsed > maxDueDate) {
-    return 'That date seems too far out — check the year';
-  }
-
-  return null;
-}
-
-function isValidDueDate(dueDate: string): boolean {
-  return dueDate.trim().length > 0 && getDueDateError(dueDate) === null;
-}
-
-function formatDueDate(text: string): string {
-  const numbers = text.replace(/\D/g, '').slice(0, 8);
-
-  if (numbers.length <= 2) {
-    return numbers;
-  }
-
-  if (numbers.length <= 4) {
-    return `${numbers.slice(0, 2)}/${numbers.slice(2)}`;
-  }
-
-  return `${numbers.slice(0, 2)}/${numbers.slice(2, 4)}/${numbers.slice(4)}`;
+  return days > 0 && days <= 294;
 }
 
 export default function OnboardingScreen({
@@ -114,253 +65,284 @@ export default function OnboardingScreen({
 }: Props) {
   const [name, setName] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [firstPregnancy, setFirstPregnancy] = useState<boolean | null>(
-    null
-  );
+  const [firstPregnancy, setFirstPregnancy] =
+    useState<boolean | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [consentToStoreData, setConsentToStoreData] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [touched, setTouched] = useState<{
-    email?: boolean;
-    password?: boolean;
-    dueDate?: boolean;
-  }>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const emailError = getEmailError(email);
-  const passwordError = getPasswordError(password);
-  const dueDateError = getDueDateError(dueDate);
+  const validate = () => {
+    const next: Record<string, string> = {};
 
-  const canContinue =
-    name.trim().length > 0 &&
-    isValidDueDate(dueDate) &&
-    firstPregnancy !== null &&
-    EMAIL_REGEX.test(email) &&
-    password.length >= 8 &&
-    /[A-Za-z]/.test(password) &&
-    /\d/.test(password);
+    if (!name.trim()) {
+      next.name = 'Please enter your name';
+    }
 
-  const handleContinue = () => {
-    if (!canContinue) return;
+    if (!dueDate.trim()) {
+      next.dueDate = 'Please enter your expected due date';
+    } else if (!isValidDueDate(dueDate)) {
+      next.dueDate = 'Enter a valid future date within 294 days';
+    }
 
-    onContinue({
-      name,
-      dueDate,
-      firstPregnancy,
-      email,
-      password,
-      consentToStoreData,
-    });
+    if (firstPregnancy === null) {
+      next.firstPregnancy = 'Please select an option';
+    }
+
+    if (!EMAIL_REGEX.test(email.trim())) {
+      next.email = 'Enter a valid email address';
+    }
+
+    if (password.length < 8) {
+      next.password = 'Use at least 8 characters';
+    } else if (
+      !/[A-Za-z]/.test(password) ||
+      !/\d/.test(password)
+    ) {
+      next.password = 'Include at least one letter and one number';
+    }
+
+    if (!consentToStoreData) {
+      next.consent = 'Please provide your consent to continue';
+    }
+
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const handleContinue = async () => {
+    if (isSubmitting) return;
+
+    if (!validate()) {
+      Alert.alert(
+        'Check your details',
+        'Please correct the highlighted fields before continuing.'
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password,
+        options: {
+          data: {
+            full_name: name.trim(),
+            due_date: dueDate.trim(),
+            first_pregnancy: firstPregnancy,
+            consent_to_store_data: consentToStoreData,
+          },
+        },
+      });
+
+      if (error) {
+        Alert.alert('Registration failed', error.message);
+        return;
+      }
+
+      if (!data.user) {
+        Alert.alert(
+          'Registration incomplete',
+          'We could not create your account. Please try again.'
+        );
+        return;
+      }
+
+      if (!data.session) {
+        Alert.alert(
+          'Account created',
+          'Your account was created, but no active session was returned. Check your Supabase email confirmation settings before continuing.'
+        );
+        return;
+      }
+
+      onContinue({
+        name: name.trim(),
+        dueDate: dueDate.trim(),
+        firstPregnancy,
+        email: cleanEmail,
+        password,
+        consentToStoreData,
+      });
+    } catch (error) {
+      console.error('Registration error:', error);
+
+      Alert.alert(
+        'Something went wrong',
+        'Unable to connect to MumWise. Please check your internet connection and try again.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const updateDate = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 8);
+    let formatted = digits;
+
+    if (digits.length > 4) {
+      formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    } else if (digits.length > 2) {
+      formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    }
+
+    setDueDate(formatted);
   };
 
   return (
     <LinearGradient
-      colors={['#FDEDF3', '#FBE0E9', '#F9D5E5']}
+      colors={['#FDEDF3', '#FBE0E9', '#FFF8FB']}
       style={styles.container}
     >
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
-          style={styles.keyboardContainer}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-            <Ionicons
-              name="chevron-back"
-              size={26}
-              color="#B23A63"
-            />
-          </TouchableOpacity>
-
           <ScrollView
-            style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+            keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.title}>Let's get to know you</Text>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={onBack}
+            >
+              <Ionicons name="arrow-back" size={23} color="#B23A63" />
+            </TouchableOpacity>
 
-            <Text style={styles.subtitle}>
-              This helps us personalize your care plan
-            </Text>
+            <View style={styles.heading}>
+              <View style={styles.logoCircle}>
+                <Ionicons name="heart" size={30} color="#FFFFFF" />
+              </View>
+              <Text style={styles.title}>Let's get to know you</Text>
+              <Text style={styles.subtitle}>
+                This helps us personalise your care journey.
+              </Text>
+            </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Your Name</Text>
-
+            <View style={styles.formCard}>
+              <Text style={styles.label}>Your name</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. Priya Sharma"
-                placeholderTextColor="#C98FA8"
+                placeholder="Enter your full name"
+                placeholderTextColor="#B99AA7"
                 value={name}
                 onChangeText={setName}
+                autoCapitalize="words"
                 returnKeyType="next"
               />
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>Expected Due Date</Text>
-
-              <TextInput
-                style={[
-                  styles.input,
-                  touched.dueDate &&
-                    dueDateError &&
-                    styles.inputError,
-                ]}
-                placeholder="DD/MM/YYYY"
-                placeholderTextColor="#C98FA8"
-                value={dueDate}
-                onChangeText={(text) => {
-                  setDueDate(formatDueDate(text));
-                }}
-                onBlur={() =>
-                  setTouched((t) => ({
-                    ...t,
-                    dueDate: true,
-                  }))
-                }
-                keyboardType="number-pad"
-                maxLength={10}
-                returnKeyType="next"
-              />
-
-              {touched.dueDate && dueDateError && (
-                <Text style={styles.errorText}>
-                  {dueDateError}
-                </Text>
+              {!!errors.name && (
+                <Text style={styles.error}>{errors.name}</Text>
               )}
 
-              {!touched.dueDate && dueDate.length === 0 && (
-                <Text style={styles.hintText}>
-                  Format: DD/MM/YYYY
-                </Text>
+              <Text style={styles.label}>Expected due date</Text>
+              <View style={styles.inputWithIcon}>
+                <TextInput
+                  style={styles.dateInput}
+                  placeholder="DD/MM/YYYY"
+                  placeholderTextColor="#B99AA7"
+                  value={dueDate}
+                  onChangeText={updateDate}
+                  keyboardType="number-pad"
+                  maxLength={10}
+                />
+                <Ionicons
+                  name="calendar-outline"
+                  size={20}
+                  color="#B23A63"
+                />
+              </View>
+              {!!errors.dueDate && (
+                <Text style={styles.error}>{errors.dueDate}</Text>
               )}
-            </View>
+              <Text style={styles.helper}>
+                You can confirm or update your due date in the pregnancy questionnaire.
+              </Text>
 
-            <View style={styles.field}>
               <Text style={styles.label}>
                 Is this your first pregnancy?
               </Text>
-
               <View style={styles.choiceRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.choiceBtn,
-                    firstPregnancy === true &&
-                      styles.choiceBtnActive,
-                  ]}
-                  onPress={() => setFirstPregnancy(true)}
-                  activeOpacity={0.8}
-                >
-                  <Text
+                {[
+                  { label: 'Yes', value: true },
+                  { label: 'No', value: false },
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item.label}
                     style={[
-                      styles.choiceText,
-                      firstPregnancy === true &&
-                        styles.choiceTextActive,
+                      styles.choiceButton,
+                      firstPregnancy === item.value &&
+                        styles.choiceSelected,
                     ]}
+                    onPress={() => setFirstPregnancy(item.value)}
                   >
-                    Yes
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.choiceBtn,
-                    firstPregnancy === false &&
-                      styles.choiceBtnActive,
-                  ]}
-                  onPress={() => setFirstPregnancy(false)}
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={[
-                      styles.choiceText,
-                      firstPregnancy === false &&
-                        styles.choiceTextActive,
-                    ]}
-                  >
-                    No
-                  </Text>
-                </TouchableOpacity>
+                    <Ionicons
+                      name={
+                        firstPregnancy === item.value
+                          ? 'radio-button-on'
+                          : 'radio-button-off'
+                      }
+                      size={19}
+                      color={
+                        firstPregnancy === item.value
+                          ? '#FFFFFF'
+                          : '#B23A63'
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.choiceText,
+                        firstPregnancy === item.value &&
+                          styles.choiceTextSelected,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-            </View>
-
-            <View style={styles.divider} />
-
-            <Text style={styles.sectionLabel}>
-              Create your account
-            </Text>
-
-            <View style={styles.field}>
-              <Text style={styles.label}>Email</Text>
-
-              <TextInput
-                style={[
-                  styles.input,
-                  touched.email &&
-                    emailError &&
-                    styles.inputError,
-                ]}
-                placeholder="you@example.com"
-                placeholderTextColor="#C98FA8"
-                value={email}
-                onChangeText={setEmail}
-                onBlur={() =>
-                  setTouched((t) => ({
-                    ...t,
-                    email: true,
-                  }))
-                }
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                returnKeyType="next"
-              />
-
-              {touched.email && emailError && (
-                <Text style={styles.errorText}>
-                  {emailError}
+              {!!errors.firstPregnancy && (
+                <Text style={styles.error}>
+                  {errors.firstPregnancy}
                 </Text>
               )}
-            </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={styles.label}>Email address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="you@example.com"
+                placeholderTextColor="#B99AA7"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {!!errors.email && (
+                <Text style={styles.error}>{errors.email}</Text>
+              )}
 
-              <View
-                style={[
-                  styles.passwordRow,
-                  touched.password &&
-                    passwordError &&
-                    styles.inputError,
-                ]}
-              >
+              <Text style={styles.label}>Create password</Text>
+              <View style={styles.inputWithIcon}>
                 <TextInput
-                  style={styles.passwordInput}
-                  placeholder="Create a password"
-                  placeholderTextColor="#C98FA8"
+                  style={styles.dateInput}
+                  placeholder="At least 8 characters"
+                  placeholderTextColor="#B99AA7"
                   value={password}
                   onChangeText={setPassword}
-                  onBlur={() =>
-                    setTouched((t) => ({
-                      ...t,
-                      password: true,
-                    }))
-                  }
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="done"
                 />
-
                 <TouchableOpacity
-                  onPress={() =>
-                    setShowPassword(!showPassword)
-                  }
-                  style={styles.eyeButton}
-                  activeOpacity={0.7}
+                  onPress={() => setShowPassword(!showPassword)}
                 >
                   <Ionicons
                     name={
@@ -368,39 +350,21 @@ export default function OnboardingScreen({
                         ? 'eye-off-outline'
                         : 'eye-outline'
                     }
-                    size={20}
+                    size={21}
                     color="#B23A63"
                   />
                 </TouchableOpacity>
               </View>
-
-              {touched.password && passwordError && (
-                <Text style={styles.errorText}>
-                  {passwordError}
-                </Text>
+              {!!errors.password && (
+                <Text style={styles.error}>{errors.password}</Text>
               )}
 
-              {!touched.password &&
-                !passwordError &&
-                password.length === 0 && (
-                  <Text style={styles.hintText}>
-                    At least 8 characters, with a letter and a
-                    number
-                  </Text>
-                )}
-            </View>
-
-            <View style={styles.consentContainer}>
               <TouchableOpacity
-                style={styles.checkboxButton}
+                style={styles.consentRow}
+                activeOpacity={0.8}
                 onPress={() =>
                   setConsentToStoreData(!consentToStoreData)
                 }
-                activeOpacity={0.7}
-                accessibilityRole="checkbox"
-                accessibilityState={{
-                  checked: consentToStoreData,
-                }}
               >
                 <Ionicons
                   name={
@@ -408,36 +372,45 @@ export default function OnboardingScreen({
                       ? 'checkbox'
                       : 'square-outline'
                   }
-                  size={24}
-                  color={
-                    consentToStoreData
-                      ? '#E8558D'
-                      : '#B23A63'
-                  }
+                  size={22}
+                  color="#B23A63"
                 />
+                <Text style={styles.consentText}>
+                  I agree to the collection and storage of the information I
+                  provide so MumWise can personalise my pregnancy experience.
+                </Text>
+              </TouchableOpacity>
+              {!!errors.consent && (
+                <Text style={styles.error}>{errors.consent}</Text>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.continueButton,
+                  isSubmitting && { opacity: 0.6 },
+                ]}
+                onPress={handleContinue}
+                activeOpacity={0.85}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.continueText}>
+                  {isSubmitting
+                    ? 'Creating Account...'
+                    : 'Create Account & Continue'}
+                </Text>
+                {!isSubmitting && (
+                  <Ionicons
+                    name="arrow-forward"
+                    size={19}
+                    color="#FFFFFF"
+                  />
+                )}
               </TouchableOpacity>
 
-              <Text style={styles.consentText}>
-                I consent to the storage of my personal data
-                to provide and personalize my experience in
-                the app.
+              <Text style={styles.bottomNote}>
+                Your pregnancy journey deserves thoughtful care.
               </Text>
             </View>
-
-            <TouchableOpacity
-              style={[
-                styles.continueBtn,
-                !canContinue &&
-                  styles.continueBtnDisabled,
-              ]}
-              disabled={!canContinue}
-              activeOpacity={0.85}
-              onPress={handleContinue}
-            >
-              <Text style={styles.continueText}>
-                Create Account & Continue
-              </Text>
-            </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -446,198 +419,160 @@ export default function OnboardingScreen({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-
-  safeArea: {
-    flex: 1,
-  },
-
-  keyboardContainer: {
-    flex: 1,
-  },
-
-  backBtn: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-
-  scrollView: {
-    flex: 1,
-  },
-
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
   scrollContent: {
-    paddingHorizontal: 30,
-    paddingTop: 20,
-    paddingBottom: 60,
+    paddingHorizontal: 22,
+    paddingTop: 8,
+    paddingBottom: 35,
   },
-
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#B23A63',
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#FFFFFFCC',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-
-  subtitle: {
-    fontSize: 14,
-    color: '#8A4A63',
-    marginTop: 6,
-    marginBottom: 30,
-  },
-
-  field: {
+  heading: {
+    alignItems: 'center',
+    marginTop: 13,
     marginBottom: 22,
   },
-
-  label: {
-    fontSize: 13,
+  logoCircle: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: '#E8558D',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 13,
+  },
+  title: {
+    color: '#B23A63',
+    fontSize: 25,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  subtitle: {
     color: '#8A4A63',
-    marginBottom: 8,
-    fontWeight: '600',
+    fontSize: 12,
+    marginTop: 7,
+    textAlign: 'center',
   },
-
-  input: {
-    backgroundColor: '#FFFFFFAA',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: '#5A2A3D',
+  formCard: {
+    backgroundColor: '#FFFFFFE8',
+    borderRadius: 24,
+    padding: 20,
     borderWidth: 1,
-    borderColor: '#F3C3D4',
+    borderColor: '#F3D4E0',
   },
-
-  inputError: {
-    borderColor: '#E0546B',
-    borderWidth: 1.5,
+  label: {
+    color: '#512D3D',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 15,
+    marginBottom: 8,
   },
-
-  errorText: {
-    color: '#C23A52',
-    fontSize: 12,
+  input: {
+    height: 49,
+    borderWidth: 1,
+    borderColor: '#EFD2DE',
+    borderRadius: 13,
+    paddingHorizontal: 14,
+    color: '#512D3D',
+    backgroundColor: '#FFFBFD',
+    fontSize: 13,
+  },
+  inputWithIcon: {
+    height: 49,
+    borderWidth: 1,
+    borderColor: '#EFD2DE',
+    borderRadius: 13,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBFD',
+  },
+  dateInput: {
+    flex: 1,
+    height: '100%',
+    color: '#512D3D',
+    fontSize: 13,
+  },
+  helper: {
+    color: '#9A7585',
+    fontSize: 10,
+    lineHeight: 15,
     marginTop: 6,
-    marginLeft: 2,
   },
-
-  hintText: {
-    color: '#A9607A',
-    fontSize: 12,
-    marginTop: 6,
-    marginLeft: 2,
-  },
-
   choiceRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
-
-  choiceBtn: {
+  choiceButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-    backgroundColor: '#FFFFFFAA',
+    height: 45,
     borderWidth: 1,
-    borderColor: '#F3C3D4',
+    borderColor: '#EFD2DE',
+    borderRadius: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFFBFD',
   },
-
-  choiceBtnActive: {
+  choiceSelected: {
     backgroundColor: '#E8558D',
     borderColor: '#E8558D',
   },
-
   choiceText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8A4A63',
-  },
-
-  choiceTextActive: {
-    color: '#fff',
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: '#F0BCD0',
-    marginVertical: 10,
-  },
-
-  sectionLabel: {
-    fontSize: 15,
-    fontWeight: '700',
     color: '#B23A63',
-    marginBottom: 18,
-    marginTop: 4,
+    fontWeight: '700',
+    fontSize: 13,
   },
-
-  passwordRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFFAA',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#F3C3D4',
+  choiceTextSelected: { color: '#FFFFFF' },
+  error: {
+    color: '#C62850',
+    fontSize: 11,
+    marginTop: 5,
   },
-
-  passwordInput: {
-    flex: 1,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: '#5A2A3D',
-  },
-
-  eyeButton: {
-    paddingLeft: 10,
-    paddingVertical: 8,
-  },
-
-  consentContainer: {
+  consentRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginTop: -2,
-    marginBottom: 24,
-    paddingHorizontal: 2,
+    marginTop: 22,
+    gap: 9,
   },
-
-  checkboxButton: {
-    marginRight: 10,
-    paddingTop: 1,
-  },
-
   consentText: {
     flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
     color: '#8A4A63',
+    fontSize: 11,
+    lineHeight: 17,
   },
-
-  continueBtn: {
+  continueButton: {
+    height: 52,
+    borderRadius: 27,
     backgroundColor: '#E8558D',
-    paddingVertical: 16,
-    borderRadius: 30,
     alignItems: 'center',
-    marginTop: 10,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 22,
     shadowColor: '#E8558D',
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
-    elevation: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-
-  continueBtnDisabled: {
-    backgroundColor: '#F0AFC7',
-    shadowOpacity: 0,
-  },
-
   continueText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bottomNote: {
+    textAlign: 'center',
+    color: '#A77C8F',
+    fontSize: 10,
+    marginTop: 17,
   },
 });

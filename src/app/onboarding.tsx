@@ -4,12 +4,13 @@ import OnboardingScreen from '../components/OnboardingScreen';
 
 export default function Onboarding() {
   const router = useRouter();
-
   return (
     <OnboardingScreen
       onContinue={(data) => {
-        console.log('Onboarding data:', data);
-        router.replace('/abha');
+        router.replace({
+          pathname: '/abha',
+          params: { name: data.name, dueDate: data.dueDate },
+        });
       }}
       onBack={() => router.back()}
     />
