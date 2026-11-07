@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import {
   Alert,
@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { readClinicianSummaryData, updateClinicianSummaryData } from '../services/clinicianSummaryStorage';
 
 const PINK = '#E8558D';
 const DEEP_PINK = '#B23A63';
@@ -67,6 +68,28 @@ export default function ExerciseYogaScreen() {
   const [exerciseDuration, setExerciseDuration] = useState('30');
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [durationInput, setDurationInput] = useState('30');
+  const [hasSavedExercise, setHasSavedExercise] = useState(false);
+  const [averageCalories, setAverageCalories] = useState('0');
+  const [summaryStorageReady, setSummaryStorageReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    readClinicianSummaryData().then(data => {
+      if (!active) return;
+      if (data.exercise?.durationMinutes !== undefined) {
+        setExerciseDuration(String(data.exercise.durationMinutes));
+        setDurationInput(String(data.exercise.durationMinutes));
+      }
+      setHasSavedExercise(Boolean(data.exercise?.saved));
+      setSummaryStorageReady(true);
+    }).catch(() => { if (active) setSummaryStorageReady(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!summaryStorageReady) return;
+    updateClinicianSummaryData('exercise', { durationMinutes: exerciseDuration, saved: hasSavedExercise });
+  }, [exerciseDuration, hasSavedExercise, summaryStorageReady]);
 
   const cardWidth = Math.min(width - 40, 620);
 
@@ -107,6 +130,7 @@ export default function ExerciseYogaScreen() {
     }
 
     setExerciseDuration(String(minutes));
+    setHasSavedExercise(true);
     setEditModalVisible(false);
   };
 

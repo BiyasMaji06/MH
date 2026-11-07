@@ -35,7 +35,7 @@ const SLIDES: {
     description: 'Your pregnancy journey deserves care at every step.',
   },
   {
-    icon: 'heart-pulse-outline',
+    icon: 'pulse-outline',
     title: 'Track Your Health',
     line1: 'Stay connected with',
     line2: 'your wellbeing',
@@ -56,7 +56,7 @@ export default function WelcomeScreen({
 }: Props) {
   const { width, height } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
 
   const compact = height < 700;
   const circleSize = Math.min(width * 0.67, compact ? 225 : 265);
@@ -79,7 +79,6 @@ export default function WelcomeScreen({
     >
       <StatusBar
         barStyle="dark-content"
-        backgroundColor="#FFF7FA"
       />
 
       <SafeAreaView style={styles.safeArea}>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { readClinicianSummaryData, updateClinicianSummaryData } from '../services/clinicianSummaryStorage';
 
 type MetricKey = 'steps' | 'heart_rate' | 'spo2' | 'sleep_hours';
 type Readings = Record<MetricKey, number>;
@@ -47,6 +48,7 @@ export default function HealthTrackingScreen() {
   const [readings, setReadings] = useState<Readings>(DEMO_READINGS);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [lastSynced, setLastSynced] = useState('02 Dec 2026, 8:30 AM');
+  const [readingSource, setReadingSource] = useState<'Demo' | 'Manual'>('Demo');
   const [syncing, setSyncing] = useState(false);
   const [form, setForm] = useState<Record<MetricKey, string>>({
     steps: String(DEMO_READINGS.steps),
@@ -55,6 +57,33 @@ export default function HealthTrackingScreen() {
     sleep_hours: String(DEMO_READINGS.sleep_hours),
   });
   const [selectedMetric, setSelectedMetric] = useState<MetricKey | null>(null);
+  const [summaryStorageReady, setSummaryStorageReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    readClinicianSummaryData().then(data => {
+      if (!active) return;
+      if (data.health?.readings) {
+        setReadings(data.health.readings as Readings);
+        setForm({
+          steps: String(data.health.readings.steps ?? DEMO_READINGS.steps),
+          heart_rate: String(data.health.readings.heart_rate ?? DEMO_READINGS.heart_rate),
+          spo2: String(data.health.readings.spo2 ?? DEMO_READINGS.spo2),
+          sleep_hours: String(data.health.readings.sleep_hours ?? DEMO_READINGS.sleep_hours),
+        });
+      }
+      if (data.health?.entries) setEntries(data.health.entries as Entry[]);
+      if (data.health?.lastSynced) setLastSynced(data.health.lastSynced);
+      if (data.health?.readingSource) setReadingSource(data.health.readingSource as 'Demo' | 'Manual');
+      setSummaryStorageReady(true);
+    }).catch(() => { if (active) setSummaryStorageReady(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!summaryStorageReady) return;
+    updateClinicianSummaryData('health', { readings, entries, lastSynced, readingSource });
+  }, [readings, entries, lastSynced, readingSource, summaryStorageReady]);
 
   const averageLabel = useMemo(() => entries.length ? 'This Week (Avg/Day)' : 'This Week (Avg/Day)', [entries.length]);
 
@@ -62,6 +91,7 @@ export default function HealthTrackingScreen() {
     setSyncing(true);
     setTimeout(() => {
       setReadings(DEMO_READINGS);
+      setReadingSource('Demo');
       setLastSynced(new Date().toLocaleString([], {
         day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
       }));
@@ -94,6 +124,7 @@ export default function HealthTrackingScreen() {
       parsed[metric.key] = value;
     }
     setReadings(parsed);
+    setReadingSource('Manual');
     setEntries(previous => [{ id: `${Date.now()}`, date: new Date().toLocaleString(), values: parsed, source: 'Manual' }, ...previous]);
     Alert.alert('Entry saved', 'Your manual health readings have been updated on this screen.');
     setActiveTab('wearable');

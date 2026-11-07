@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert, Modal, Platform, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View, KeyboardAvoidingView, StatusBar,
@@ -10,6 +10,7 @@ import { router } from 'expo-router';
 import { Asset } from 'expo-asset';
 import * as Sharing from 'expo-sharing';
 import { ALL_FOODS, normalizeFoodName, scaleNutrients, Food, Nutrients } from '../data/foodDatabase';
+import { readClinicianSummaryData, updateClinicianSummaryData } from '../services/clinicianSummaryStorage';
 
 type MealType = 'Breakfast' | 'Lunch' | 'Evening Snack' | 'Dinner';
 type Entry = { id: string; food: Food; grams: number };
@@ -49,6 +50,27 @@ export default function NutritionTrackingScreen({ onBack }: Props) {
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
   const [waterMl, setWaterMl] = useState(0);
+  const [summaryStorageReady, setSummaryStorageReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    readClinicianSummaryData().then(data => {
+      if (!active) return;
+      if (data.nutrition?.entries) {
+        setEntries(data.nutrition.entries as Record<MealType, Entry[]>);
+      }
+      if (typeof data.nutrition?.waterMl === 'number') {
+        setWaterMl(data.nutrition.waterMl);
+      }
+      setSummaryStorageReady(true);
+    }).catch(() => { if (active) setSummaryStorageReady(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!summaryStorageReady) return;
+    updateClinicianSummaryData('nutrition', { entries, waterMl, totalCalories: totals.calories, });
+  }, [entries, waterMl, summaryStorageReady]);
 
   const all = useMemo(() => MEALS.flatMap(m => entries[m]), [entries]);
   const totals = useMemo(() => sum(all), [all]);

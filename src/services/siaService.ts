@@ -1,9 +1,4 @@
-
 import { supabase } from './supabase';
-
-// --------------------------------------------------
-// TYPES
-// --------------------------------------------------
 
 export type SIAResult =
   | {
@@ -72,10 +67,6 @@ export type DoctorResponse = {
   status: 'submitted' | 'approved' | 'rejected';
   created_at: string;
 };
-
-// --------------------------------------------------
-// TEXT NORMALISATION AND KEYWORDS
-// --------------------------------------------------
 
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'is', 'are', 'am', 'was', 'were',
@@ -180,10 +171,6 @@ function getKeywords(value: string): string[] {
     );
 }
 
-// --------------------------------------------------
-// CATEGORY HINTS
-// --------------------------------------------------
-
 function getCategoryHints(question: string): string[] {
   const text = normaliseText(question);
   const hints: string[] = [];
@@ -236,10 +223,6 @@ function getCategoryHints(question: string): string[] {
   return hints;
 }
 
-// --------------------------------------------------
-// URGENT SYMPTOM CHECK
-// --------------------------------------------------
-
 const URGENT_PATTERNS = [
   /\bheavy bleeding\b/i,
   /\bsoaking (a )?pad\b/i,
@@ -279,10 +262,6 @@ function getUrgentMessage(): string {
     'Please do not wait for an answer from SIA or for a doctor to review a submitted question.'
   );
 }
-
-// --------------------------------------------------
-// LOCAL FAQ MATCHING (FALLBACK)
-// --------------------------------------------------
 
 function findBestFAQ(
   userQuestion: string,
@@ -372,10 +351,6 @@ function findBestFAQ(
   return bestFAQ;
 }
 
-// --------------------------------------------------
-// FETCH APPROVED FAQS
-// --------------------------------------------------
-
 async function fetchApprovedFAQs(): Promise<FAQ[]> {
   const { data: categoryData, error: categoryError } =
     await supabase
@@ -434,16 +409,12 @@ async function fetchApprovedFAQs(): Promise<FAQ[]> {
   return allFAQs;
 }
 
-// --------------------------------------------------
-// GEMINI SEMANTIC FAQ MATCHING
-// --------------------------------------------------
-
 async function findSemanticFAQ(
   question: string
 ): Promise<SemanticMatch | null> {
   try {
     const { data, error } = await supabase.functions.invoke(
-      'match-sia-faq',
+      'bright-responder',
       {
         body: {
           question,
@@ -452,10 +423,19 @@ async function findSemanticFAQ(
     );
 
     if (error) {
-      console.warn(
-        'SIA semantic matching unavailable:',
-        error.message
-      );
+      console.error('SIA invocation error:', error);
+      const context = (error as any).context;
+      if (context) {
+        console.error('HTTP status:', context.status);
+        try {
+          console.error(
+            'HTTP response:',
+            await context.clone().text()
+          );
+        } catch {
+          console.error('Could not read HTTP response.');
+        }
+      }
       return null;
     }
 
@@ -486,10 +466,6 @@ async function findSemanticFAQ(
   }
 }
 
-// --------------------------------------------------
-// RETRIEVE THE APPROVED ANSWER FOR A MATCHED FAQ
-// --------------------------------------------------
-
 async function fetchApprovedFAQById(
   faqId: string
 ): Promise<FAQ | null> {
@@ -515,10 +491,6 @@ async function fetchApprovedFAQById(
   return data as FAQ;
 }
 
-// --------------------------------------------------
-// MAIN SIA FAQ SEARCH
-// --------------------------------------------------
-
 export async function askSIA(
   question: string
 ): Promise<SIAResult> {
@@ -539,8 +511,6 @@ export async function askSIA(
       message: 'Please keep your question under 500 characters.',
     };
   }
-
-  // Always check urgent symptoms before FAQ matching.
 
   if (hasUrgentSymptoms(cleanQuestion)) {
     return {
@@ -564,14 +534,9 @@ export async function askSIA(
       };
     }
 
-    // STEP 1: Ask the deployed Gemini function to identify
-    // a semantically equivalent approved FAQ question.
-
     const semanticMatch = await findSemanticFAQ(cleanQuestion);
 
     if (semanticMatch) {
-      // STEP 2: Retrieve the actual approved answer from Supabase.
-      // Gemini never supplies the medical answer itself.
 
       const matchedFAQ = await fetchApprovedFAQById(
         semanticMatch.faqId!
@@ -586,9 +551,6 @@ export async function askSIA(
         };
       }
     }
-
-    // STEP 3: If AI matching fails or finds no match,
-    // use the existing local keyword matcher.
 
     const faqs = await fetchApprovedFAQs();
 
@@ -629,10 +591,6 @@ export async function askSIA(
     };
   }
 }
-
-// --------------------------------------------------
-// USER: SUBMIT AN UNANSWERED QUESTION
-// --------------------------------------------------
 
 export async function submitUnansweredQuestion(
   question: string,
@@ -676,10 +634,6 @@ export async function submitUnansweredQuestion(
   return data;
 }
 
-// --------------------------------------------------
-// STAFF: GET CURRENT USER ROLE
-// --------------------------------------------------
-
 export async function getStaffRole(): Promise<StaffRole | null> {
   const {
     data: { user },
@@ -704,10 +658,6 @@ export async function getStaffRole(): Promise<StaffRole | null> {
 
   return null;
 }
-
-// --------------------------------------------------
-// ADMIN: GET UNANSWERED QUESTIONS
-// --------------------------------------------------
 
 export async function getUnansweredQuestions() {
   const { data, error } = await supabase
@@ -734,10 +684,6 @@ export async function getUnansweredQuestions() {
   return (data ?? []) as UnansweredQuestion[];
 }
 
-// --------------------------------------------------
-// ADMIN: GET REGISTERED DOCTORS
-// --------------------------------------------------
-
 export async function getDoctors() {
   const { data, error } = await supabase
     .from('staff_users')
@@ -751,10 +697,6 @@ export async function getDoctors() {
 
   return data || [];
 }
-
-// --------------------------------------------------
-// ADMIN: ASSIGN QUESTION TO DOCTOR
-// --------------------------------------------------
 
 export async function assignQuestionToDoctor(
   questionId: string,
@@ -775,10 +717,6 @@ export async function assignQuestionToDoctor(
     );
   }
 }
-
-// --------------------------------------------------
-// DOCTOR: GET ASSIGNED QUESTIONS
-// --------------------------------------------------
 
 export async function getMyDoctorAssignments() {
   const {
@@ -811,10 +749,6 @@ export async function getMyDoctorAssignments() {
 
   return data || [];
 }
-
-// --------------------------------------------------
-// DOCTOR: SUBMIT RESPONSE
-// --------------------------------------------------
 
 export async function submitDoctorResponse(
   questionId: string,
@@ -901,10 +835,6 @@ export async function submitDoctorResponse(
   return data as DoctorResponse;
 }
 
-// --------------------------------------------------
-// ADMIN: GET DOCTOR RESPONSES AWAITING APPROVAL
-// --------------------------------------------------
-
 export async function getPendingDoctorResponses() {
   const { data, error } = await supabase
     .from('doctor_responses')
@@ -925,10 +855,6 @@ export async function getPendingDoctorResponses() {
   return (data ?? []) as DoctorResponse[];
 }
 
-// --------------------------------------------------
-// ADMIN: APPROVE RESPONSE AND PUBLISH AS FAQ
-// --------------------------------------------------
-
 export async function approveDoctorResponse(
   responseId: string
 ) {
@@ -948,10 +874,6 @@ export async function approveDoctorResponse(
 
   return data as string;
 }
-
-// --------------------------------------------------
-// ADMIN: REJECT DOCTOR RESPONSE
-// --------------------------------------------------
 
 export async function rejectDoctorResponse(
   responseId: string

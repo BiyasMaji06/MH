@@ -20,7 +20,6 @@ if (supabaseUrl.endsWith('/rest/v1/')) {
   );
 }
 
-// Browser storage for Expo web.
 const webStorage = {
   getItem: async (key: string): Promise<string | null> => {
     if (typeof window === 'undefined') return null;
@@ -48,7 +47,6 @@ const webStorage = {
     try {
       window.localStorage.removeItem(key);
     } catch {
-      // Ignore unavailable browser storage.
     }
   },
 };
