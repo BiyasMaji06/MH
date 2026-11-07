@@ -103,8 +103,10 @@ export default function NutritionTrackingScreen({ onBack }: Props) {
   const removeFood = (m: MealType, id: string) => {
     Alert.alert('Remove food?', 'Remove this item from your meal log?', [
       { text: 'Keep', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () =>
-        setEntries(prev => ({ ...prev, [m]: prev[m].filter(e => e.id !== id) })) },
+      {
+        text: 'Remove', style: 'destructive', onPress: () =>
+          setEntries(prev => ({ ...prev, [m]: prev[m].filter(e => e.id !== id) }))
+      },
     ]);
   };
   const openResource = async () => {
@@ -236,7 +238,6 @@ export default function NutritionTrackingScreen({ onBack }: Props) {
                   {nutrient('Fiber', totals.fiber, GOALS.fiber, C.orange)}
                 </View>
               </View>
-              <Text style={s.disclaimer}>Illustrative reference only — not an individualized pregnancy target.</Text>
             </View>
             <View style={s.actions}>
               <TouchableOpacity style={s.actionCard} onPress={() => openSearch('Breakfast')}>
@@ -315,21 +316,47 @@ export default function NutritionTrackingScreen({ onBack }: Props) {
           <View style={{ height: 18 }} />
         </ScrollView>
         <View style={s.bottomNav}>
-          {[
-            { label: 'Home', icon: 'home-outline' as const },
-            { label: 'Track', icon: 'pricetag-outline' as const },
-            { label: 'Learn', icon: 'book-outline' as const },
-            { label: 'Chat', icon: 'chatbubble-ellipses-outline' as const },
-            { label: 'More', icon: 'ellipsis-horizontal' as const },
-          ].map(item => (
-            <TouchableOpacity key={item.label} style={s.navItem}
-              onPress={() => item.label === 'Home' ? router.replace('/home') :
-                item.label === 'Track' ? setTab('Today') :
-                Alert.alert(item.label, 'This section is not connected yet.')}>
-              <Ionicons name={item.icon} size={20} color={item.label === 'Track' ? '#30278F' : '#526080'} />
-              <Text style={[s.navText, item.label === 'Track' && { color: '#30278F', fontWeight: '700' }]}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            style={s.navItem}
+            onPress={() => router.replace('/home' as any)}
+          >
+            <Ionicons name="home-outline" size={21} color="#526080" />
+            <Text style={s.navText}>Home</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.navItem}
+            onPress={() => router.replace('/health-tracking' as any)}
+          >
+            <Ionicons name="pulse-outline" size={21} color="#526080" />
+            <Text style={s.navText}>Track</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.navItem}
+            onPress={() => router.replace('/learn' as any)}
+          >
+            <Ionicons name="book" size={21} color="#E8558D" />
+            <Text style={[s.navText, { color: '#E8558D', fontWeight: '700' }]}>
+              Learn
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.navItem}
+            onPress={() => router.replace('/sia' as any)}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={21} color="#526080" />
+            <Text style={s.navText}>Chat</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.navItem}
+            onPress={() => router.replace('/more' as any)}
+          >
+            <Ionicons name="grid-outline" size={21} color="#526080" />
+            <Text style={s.navText}>More</Text>
+          </TouchableOpacity>
         </View>
 
         <Modal visible={modal} transparent animationType="slide" onRequestClose={() => setModal(false)}>
@@ -343,10 +370,10 @@ export default function NutritionTrackingScreen({ onBack }: Props) {
               <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1 }}>
                 {!query.trim() ? <Text style={s.emptyHint}>Search for rice, dal, banana, milk…</Text> :
                   results.length === 0 ? <Text style={s.emptyHint}>No matching foods found.</Text> :
-                  results.map(f => <TouchableOpacity key={f.id} style={[s.result, food?.id === f.id && s.selected]} onPress={() => setFood(f)}>
-                    <View style={{ flex: 1 }}><Text style={s.foodName}>{f.name}</Text><Text style={s.sub}>{Math.round(f.nutrients.calories)} kcal per 100 g</Text></View>
-                    <Ionicons name={food?.id === f.id ? 'radio-button-on' : 'radio-button-off'} color={C.pink} size={21} />
-                  </TouchableOpacity>)}
+                    results.map(f => <TouchableOpacity key={f.id} style={[s.result, food?.id === f.id && s.selected]} onPress={() => setFood(f)}>
+                      <View style={{ flex: 1 }}><Text style={s.foodName}>{f.name}</Text><Text style={s.sub}>{Math.round(f.nutrients.calories)} kcal per 100 g</Text></View>
+                      <Ionicons name={food?.id === f.id ? 'radio-button-on' : 'radio-button-off'} color={C.pink} size={21} />
+                    </TouchableOpacity>)}
               </ScrollView>
               {food && <View style={s.serving}>
                 <Text style={s.label}>Serving size (grams)</Text>

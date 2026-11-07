@@ -340,9 +340,7 @@ export default function ExerciseYogaScreen() {
 
           <TouchableOpacity
             style={styles.navItem}
-            onPress={() =>
-              router.push('/health-tracking' as any)
-            }
+            onPress={() => router.replace('/health-tracking' as any)}
           >
             <Ionicons
               name="pulse-outline"
@@ -354,7 +352,7 @@ export default function ExerciseYogaScreen() {
 
           <TouchableOpacity
             style={styles.navItem}
-            onPress={() => router.push('/learn' as any)}
+            onPress={() => router.replace('/learn' as any)}
           >
             <Ionicons
               name="book-outline"
@@ -366,12 +364,7 @@ export default function ExerciseYogaScreen() {
 
           <TouchableOpacity
             style={styles.navItem}
-            onPress={() =>
-              Alert.alert(
-                'Chat with SIA',
-                'SIA will be available here.',
-              )
-            }
+             onPress={() => router.replace('/sia' as any)}
           >
             <Ionicons
               name="chatbubble-ellipses-outline"

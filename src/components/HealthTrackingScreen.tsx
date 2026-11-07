@@ -234,11 +234,11 @@ export default function HealthTrackingScreen() {
             <Ionicons name="fitness" size={21} color="#4237A8" />
             <Text style={styles.navLabelActive}>Track</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => Alert.alert('Learn', 'The Learn section is coming soon.')}>
+          <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/learn' as any)}>
             <Ionicons name="book-outline" size={21} color="#77758C" />
             <Text style={styles.navLabel}>Learn</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => Alert.alert('Chat', 'SIA chat is coming soon.')}>
+          <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/sia' as any)}>
             <Ionicons name="chatbubble-ellipses-outline" size={21} color="#77758C" />
             <Text style={styles.navLabel}>Chat</Text>
           </TouchableOpacity>
